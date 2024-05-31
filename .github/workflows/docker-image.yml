@@ -1,0 +1,36 @@
+name: CI/CD | HPC - UEH
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build docker Image
+        run: docker build --progress=plain -t truonghaogia/hpc-ueh:v1 .
+      - name: Sign in to Docker Hub
+        run: docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_PASSWORD }}
+      - name: Push Image to Docker Hub
+        run: docker push truonghaogia/hpc-ueh:v1
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Executing remote ssh command using password
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.HOST_USERNAME }}
+          password: ${{ secrets.HOST_PASSWORD }}
+          port: 22
+          script: |
+            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} -p ${{ secrets.DOCKERHUB_PASSWORD }}
+            docker rm hpc-ueh -f
+            docker rmi truonghaogia/hpc-ueh:v1
+            docker pull truonghaogia/hpc-ueh:v1
+            docker run -dp 3100:3100 --name hpc-ueh --restart unless-stopped truonghaogia/hpc-ueh:v1
